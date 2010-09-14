@@ -3,79 +3,57 @@ function result = local_vol_surface(name, option_prices, maturities, strikes, un
    
     % Construct the implied volatility surface
     ivol_surface = zeros(n, m);
+    vegas = zeros(n, m);
     for i = 1:n
         for j = 1:m
             ivol_surface(i,j) = max(0, bsm.ivol(option_prices(i,j), ...
                         underlying, strikes(j), maturities(i), 0, r, 0));
+             
+            vegas(i, j) = bsm.vega(underlying, strikes(j), ...
+                            ivol_surface(i, j), maturities(i), 0, r, 0);
         end
     end
     
-    % Extend the ivol surface for when we extrapolate to try to
-    % asymptotically approach a constant value
-    extended_ivol_surface = zeros(n+2, m+2);
-    extended_ivol_surface(2:end-1, 2:end-1) = ivol_surface;
-    
-    % down the left side
-    extended_ivol_surface(1,1) = ivol_surface(1,1);
-    extended_ivol_surface(2:end-1, 1) = ivol_surface(:, 1);
-    extended_ivol_surface(end, 1) = ivol_surface(end, 1);
-    
-    % on top
-    extended_ivol_surface(1, 2:end-1) = ivol_surface(1, :);
-    extended_ivol_surface(1, end) = ivol_surface(1, end);
-    
-    % on the right
-    extended_ivol_surface(2:end-1, end) = ivol_surface(:, end);
-    extended_ivol_surface(end, end) = ivol_surface(end, end);
-    
-    % on the bottom
-    extended_ivol_surface(end, 2:end-1) = ivol_surface(end, :);
-    
-    %%%% CHANGE BACK TO 1/252
-    %%%% and dK = 1
-    
-    
-    % define what our extended maturities and strikes are
-    extended_maturities = [1/252; maturities; 2];
-    extended_strikes = [1; strikes; 200];
-    
-    % Smoothing the surface using thin-plate splines
-    dK = 1;
-    Ko = 1:dK:extended_strikes(end);
+    fHandle = @(parameters) surface_handle(ivol_surface, maturities, ...
+                                    strikes, vegas, parameters);
+    guess = randn(numel(maturities), 6);
+    options = optimset('MaxFunEvals', Inf, 'TolX', 1e-16, ...
+                       'TolFun', 1e-16, 'Display', 'off', ...
+                       'Diagnostics', 'off', 'MaxIter', Inf, 
+                        'LargeScale', 'off');
+    [parameters, mse] = fminunc(fHandle, guess, options);
+                 
     dT = 1/252;
-    To = 1/252:dT:extended_maturities(end);
+    To = maturities(1):dT:maturities(end);
+    dK = 1;
+    Ko = strikes(1):dK:strikes(end);
     
-    NKo = length(Ko); NTo = length(To);
+    a = parameters(1);
+    b = parameters(2);
+    c = parameters(3);
+    d = parameters(4);
+    e = parameters(5);
+    f = parameters(6);
     
-    [Kgo, Tgo] = meshgrid(Ko, To);
-    
-    Kvo = reshape(Kgo, [NKo*NTo, 1]); % vectorize
-    Tvo = reshape(Tgo, [NKo*NTo, 1]); 
-    
-    Tmo = log(Tvo);
-    Kmo = log(underlying ./ Kvo) ./ sqrt(Tvo);
-    Km = log(underlying ./ extended_strikes) ./ sqrt(extended_maturities);
-    Tm = log(extended_maturities);
-
-    sbm = zeros(numel(Km) * numel(Tm), 2);
-    for k = 1:numel(Km)
-        for t = 1:numel(Tm)
-            sbm((k-1) * numel(Km) + t, :) = [Km(k) Tm(t)];
+    smoothed_ivol = zeros(numel(To), numel(Ko));
+    for i = 1:numel(To)
+        t = To(i);
+        
+        for j = 1:numel(Ko)
+            k = Ko(j);
+            linear_shift = a;
+            slope_change = b*(t - mean(maturities)) + c*(k - mean(strikes));
+            curvature = d*(t - mean(maturities))^2 + ...
+                        e*(k - mean(strikes))^2 + ...
+                        f*(t - mean(maturities))*(k - mean(strikes));
+                    
+            smoothed_ivol(i,j) = linear_shift + slope_change + curvature;
         end
     end
-    
-    % perform the actual smoothing (Radial Basis Function with Thinplate
-    % kernel)
-    coef = rbfcreate(sbm', extended_ivol_surface(:)', ...
-                    'RBFFunction', 'multiquadric', 'RBFSmooth', 75);
-    IVvo = rbfinterp([Kmo'; Tmo'], coef)';
-    smoothed_ivol = reshape(IVvo, [NTo, NKo]);
-    
-    % ensure our volatility does not go negative.
-    smoothed_ivol(smoothed_ivol < 0) = 0.02; 
     
     %{
     f = figure();
+    subplot(2,1,1);
     surf(strikes, maturities, ivol_surface);
     colorbar;
     alpha(.4);
@@ -84,8 +62,8 @@ function result = local_vol_surface(name, option_prices, maturities, strikes, un
     zlabel('Implied Volatility (%)');
     local_header = sprintf('%s Implied Volatility', name);
     title(local_header);
-    
-    f = figure();
+
+    subplot(3,1,2);
     surf(extended_strikes, extended_maturities, extended_ivol_surface);
     colorbar;
     alpha(.4);
@@ -94,8 +72,9 @@ function result = local_vol_surface(name, option_prices, maturities, strikes, un
     zlabel('Implied Volatility (%)');
     local_header = sprintf('%s Extended Implied Volatility', name);
     title(local_header);
+
     
-    f = figure();
+    subplot(2,1,2);
     surf(Ko, To, smoothed_ivol);
     colorbar;
     alpha(.4);
@@ -136,22 +115,27 @@ function result = local_vol_surface(name, option_prices, maturities, strikes, un
     % Compute our local volatility using Dupire
     % See http://www.fincad.com/derivatives-resources/articles/local-volatility.aspx
     local_vol = zeros(size(smoothed_ivol));
-    for i = 1:NTo
-        for j = 1:NKo
+    for i = 1:numel(To)
+        for j = 1:numel(Ko)
             sigma = smoothed_ivol(i,j);
+            
             tau = To(i);
             k = Ko(j);
+            
             d1 = (log(underlying / k) + (r +0.5*sigma^2)*tau) / (sigma*sqrt(tau));
             dSdT = dVol_dT(i,j);
             dSdK = dVol_dK(i,j);
             d2SdK2 = d2Vol_dK2(i,j);
+            
             numerator = sigma^2 + 2*tau*sigma*dSdT + ...
                                 2*r*k*tau*sigma*dSdK;
+            
             denominator = (1 + k*d1*sqrt(tau)*dSdK)^2 + ...
                                 (k^2)*tau*sigma*(d2SdK2 - ...
-                                        d1*dSdK^2*sqrt(tau));
+                                        d1*(dSdK^2)*sqrt(tau));
+            
             %local vol cutoff at 2 percent (don't go non-negative)
-            local_vol(i, j) = sqrt(max(numerator / denominator, 0.02));
+            local_vol(i, j) = max(sqrt(numerator / denominator), 0.02);
         end 
     end
     
@@ -172,5 +156,36 @@ function result = local_vol_surface(name, option_prices, maturities, strikes, un
     local_header = sprintf('%s Local Volatility', name);
     title(local_header);
     %}
+end
+
+function mse = surface_handle(surface, maturities, strikes, weights, parameters)
+    [n m] = size(surface);
+    
+    fit_surface = zeros(size(surface));
+    
+    a = parameters(1);
+    b = parameters(2);
+    c = parameters(3);
+    d = parameters(4);
+    e = parameters(5);
+    f = parameters(6);
+    
+    for i = 1:n
+        t = maturities(i);
+            
+        for j = 1:m
+    
+            k = strikes(j);
+            linear_shift = a;
+            slope_change = b*(t - mean(maturities)) + c*(k - mean(strikes));
+            curvature = d*(t - mean(maturities))^2 + ...
+                        e*(k - mean(strikes))^2 + ...
+                        f*(t - mean(maturities))*(k - mean(strikes));
+                    
+            fit_surface(i,j) = linear_shift + slope_change + curvature;
+        end
+    end
+    
+    mse = norm(weights .* (fit_surface - surface), 'fro');
 end
 
