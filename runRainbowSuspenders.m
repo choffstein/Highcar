@@ -70,5 +70,7 @@ function out = runRainbowSuspenders()
               i2.*param.S(2).x_0 + ...
               i3.*param.S(3).x_0), 0);
 
+  fprintf('%f,%f,%f\n', 1-mean(i1),1-mean(i2),1-mean(i3));
+  
   out.rainbow = exp(-param.r*N*dt)*v; 
 end
