@@ -51,16 +51,19 @@ function result = local_vol_surface(S, r)
         for j = 1:numel(Ko)
             k = Ko(j);
             linear_shift = a;
+            
             slope_change = b*(t - mean(maturities)) + c*(k - mean(strikes));
+            
             curvature = d*(t - mean(maturities))^2 + ...
                         e*(k - mean(strikes))^2 + ...
                         f*(t - mean(maturities))*(k - mean(strikes));
                     
-            smoothed_ivol(i,j) = linear_shift + slope_change + curvature;
+            % make sure ivol is positive
+            smoothed_ivol(i,j) = max(linear_shift + slope_change + curvature, 0.02);
         end
     end
     
-    %{
+
     f = figure();
     subplot(2,1,1);
     surf(strikes, maturities, ivol_surface);
@@ -72,17 +75,6 @@ function result = local_vol_surface(S, r)
     local_header = sprintf('%s Implied Volatility', name);
     title(local_header);
 
-    subplot(3,1,2);
-    surf(extended_strikes, extended_maturities, extended_ivol_surface);
-    colorbar;
-    alpha(.4);
-    xlabel('Strikes');
-    ylabel('TTM');
-    zlabel('Implied Volatility (%)');
-    local_header = sprintf('%s Extended Implied Volatility', name);
-    title(local_header);
-
-    
     subplot(2,1,2);
     surf(Ko, To, smoothed_ivol);
     colorbar;
@@ -92,7 +84,7 @@ function result = local_vol_surface(S, r)
     zlabel('Implied Volatility (%)');
     local_header = sprintf('%s Interpolated & Extrapolated Implied Volatility', name);
     title(local_header);
-    %}
+
     
     % To construct our local vol models we have to numerically find our 
     % derivatives (we use forward first differences)
@@ -121,6 +113,7 @@ function result = local_vol_surface(S, r)
     d2Vol_dK2(:, end) = d2Vol_dK2(:, end-1);
     d2Vol_dK2(end, :) = d2Vol_dK2(end-1, :); 
     
+    
     % Compute our local volatility using Dupire
     % See http://www.fincad.com/derivatives-resources/articles/local-volatility.aspx
     local_vol = zeros(size(smoothed_ivol));
@@ -144,7 +137,7 @@ function result = local_vol_surface(S, r)
                                         d1*(dSdK^2)*sqrt(tau));
             
             %local vol cutoff at 2 percent (don't go non-negative)
-            local_vol(i, j) = max(sqrt(numerator / denominator), 0.02);
+            local_vol(i, j) = sqrt(max(numerator / denominator, 0.02));
         end 
     end
     
@@ -154,7 +147,6 @@ function result = local_vol_surface(S, r)
     result.dT = dT;
     result.dK = dK;
     
-    %{
     f = figure();
     surf(Ko, To, local_vol);
     colorbar;
@@ -164,7 +156,6 @@ function result = local_vol_surface(S, r)
     zlabel('Local Volatility (%)');
     local_header = sprintf('%s Local Volatility', name);
     title(local_header);
-    %}
 end
 
 function mse = surface_handle(surface, maturities, strikes, weights, parameters)
