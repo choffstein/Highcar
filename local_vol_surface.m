@@ -1,12 +1,21 @@
-function result = local_vol_surface(name, option_prices, maturities, strikes, underlying, r)
+function result = local_vol_surface(S, r)
+
+    name = S.name;
+    option_prices = S.c;
+    maturities = S.T;
+    strikes = S.K;
+    underlying = S.x_0;
+
+
     [n, m] = size(option_prices);
    
     % Construct the implied volatility surface
+    phi = 1; % given calls
     ivol_surface = zeros(n, m);
     vegas = zeros(n, m);
     for i = 1:n
         for j = 1:m
-            ivol_surface(i,j) = max(0, bsm.ivol(option_prices(i,j), ...
+            ivol_surface(i,j) = max(0, bsm.ivol(phi, option_prices(i,j), ...
                         underlying, strikes(j), maturities(i), 0, r, 0));
              
             vegas(i, j) = bsm.vega(underlying, strikes(j), ...

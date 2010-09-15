@@ -1,7 +1,13 @@
 function [Z, z] = multivariate_gauss(rho, m, n, N, z)
-    if nargin < 5
-        z = randn(m,n,N);
-    end
+
+  generateNewZ = isempty(z);
+  if generateNewZ
+    disp('generating new z');
+    z = randn(m,n,N);
+  else
+    disp('using old z');
+  end
+
     
     sigma = eye(m,m) + (ones(m,m)-eye(m,m))*rho;
 
