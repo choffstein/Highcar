@@ -63,6 +63,7 @@ function result = local_vol_surface(S, r)
         end
     end
     
+    %{
 
     f = figure();
     subplot(2,1,1);
@@ -84,7 +85,7 @@ function result = local_vol_surface(S, r)
     zlabel('Implied Volatility (%)');
     local_header = sprintf('%s Interpolated & Extrapolated Implied Volatility', name);
     title(local_header);
-
+%}
     
     % To construct our local vol models we have to numerically find our 
     % derivatives (we use forward first differences)
@@ -147,6 +148,7 @@ function result = local_vol_surface(S, r)
     result.dT = dT;
     result.dK = dK;
     
+    %{
     f = figure();
     surf(Ko, To, local_vol);
     colorbar;
@@ -156,6 +158,7 @@ function result = local_vol_surface(S, r)
     zlabel('Local Volatility (%)');
     local_header = sprintf('%s Local Volatility', name);
     title(local_header);
+    %}
 end
 
 function mse = surface_handle(surface, maturities, strikes, weights, parameters)
