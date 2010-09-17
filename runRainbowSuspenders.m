@@ -16,14 +16,16 @@
 %}
 
 % out = runRainbowSuspenders(param, prev)
-function out = runRainbowSuspenders()
+function out = runRainbowSuspenders(varargin)
 
-  param = getParam();
+  optargs = {getParam() getEmptyPrev()};
+  optargs(1:numel(varargin)) = varargin;
+  [param prev] = optargs{:};
+
   prev.z = [];
-  prev.S(1).f_gc_surface = [];
-  prev.S(2).f_gc_surface = [];
-  prev.S(3).f_gc_surface = [];
-  
+  prev.S(1).f_surface = [];
+  prev.S(2).f_surface = [];
+  prev.S(3).f_surface = [];
   
   getStat = @(x) [mean(x); std(x)/sqrt(numel(x))];
 
@@ -34,7 +36,7 @@ function out = runRainbowSuspenders()
 
   for i=1:m
     % full stock path
-    [x f_gc_surface] = run_stock(param, prev, i, squeeze(Z(i,:,:)));
+    [x f_surface] = run_stock(param, prev, i, squeeze(Z(i,:,:)));
     
     % vanilla put and call
     callStrike = param.K_call*param.S(i).x_0;
@@ -44,10 +46,65 @@ function out = runRainbowSuspenders()
     out.S(i).put = exp(-param.r*N*dt) * max(putStrike - x(:,end), 0);
     out.S(i).putstat = getStat(out.S(i).put);
     
-    out.S(i).f_gc_surface = f_gc_surface;
+    out.S(i).f_surface = f_surface;
     out.S(i).x = x;
+    
+    sorted_values = sort(out.S(i).x(:, end) ./ param.S(i).x_0 - 1);
+    
+    f = figure();
+    subplot(2,1,1);
+    [f,xi] = ksdensity(sorted_values, 'function', 'pdf');
+    plot(xi, f, 'k');
+    t = sprintf('Density of Stock Returns for %s', param.S(i).name);
+    title(t);
+    xlabel('Price');
+    ylabel('Density');
+    subplot(2,1,2);
+    hist(sorted_values, 100);
+    
+    
+    f = figure();
+    m = mean(out.S(i).x);
+    s = std(out.S(1).x);
+    plot(1:numel(m), m);
+    hold on;
+    plot(1:numel(s), m+s, 'r:');
+    plot(1:numel(s), m-s, 'r:');
+    t = sprintf('Mean and Standard Deviation Over Time for %s', param.S(i).name);
+    title(t);
+    xlabel('Days');
+    ylabel('Price');
+    axis([1 numel(s) min(m-s) max(m+s)]);
+    
     disp(i);
   end
+  
+  f = figure();
+  scatterhist(out.S(1).x(:,end) / param.S(1).x_0 - 1, out.S(2).x(:, end) ./ param.S(2).x_0 - 1);
+  t = sprintf('Stock Returns for %s v %s', param.S(1).name, param.S(2).name);
+  title(t);
+  xl = sprintf('%s', param.S(1).name);
+  xlabel(xl);
+  yl = sprintf('%s', param.S(2).name);
+  ylabel(yl);
+  
+  f = figure();
+  scatterhist(out.S(2).x(:,end) / param.S(2).x_0 - 1, out.S(3).x(:, end) ./ param.S(3).x_0 - 1);
+  t = sprintf('Stock Returns for %s v %s', param.S(2).name, param.S(3).name);
+  title(t);
+  xl = sprintf('%s', param.S(2).name);
+  xlabel(xl);
+  yl = sprintf('%s', param.S(3).name);
+  ylabel(yl);
+  
+  f = figure();
+  scatterhist(out.S(3).x(:,end) / param.S(3).x_0 - 1, out.S(2).x(:, end) ./ param.S(2).x_0 - 1);
+  t = sprintf('Stock Returns for %s v %s', param.S(3).name, param.S(1).name);
+  title(t);
+  xl = sprintf('%s', param.S(3).name);
+  xlabel(xl);
+  yl = sprintf('%s', param.S(1).name);
+  ylabel(yl);
   
   % call on worst two stocks
   s1_returns = out.S(1).x ./ param.S(1).x_0;
@@ -62,15 +119,14 @@ function out = runRainbowSuspenders()
   i1 = (s1_ret ~= maxes);
   i2 = (s2_ret ~= maxes);
   i3 = (s3_ret ~= maxes);
-  s1_ret = s1_returns(:, end);
-  s2_ret = s2_returns(:, end);
-  s3_ret = s3_returns(:, end);
+  
   v = max((i1.*out.S(1).x(:, end) + i2.*out.S(2).x(:, end) + ...
               i3.*out.S(3).x(:, end)) - (i1.*param.S(1).x_0 + ...
               i2.*param.S(2).x_0 + ...
               i3.*param.S(3).x_0), 0);
 
-  fprintf('%f,%f,%f\n', 1-mean(i1),1-mean(i2),1-mean(i3));
+  fprintf('Probability of being best performer after year 1\n');
+  fprintf('\t%f,%f,%f\n', 1-mean(i1),1-mean(i2),1-mean(i3));
   
   out.rainbow = exp(-param.r*N*dt)*v; 
 end
