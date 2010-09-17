@@ -1,6 +1,6 @@
 function [VaR, CVaR] = calculate_VaR(p)
-    values = run_simulation(34, 15, 25, 0.045, 0.3);
-    final_values = values(:, end);
+    out = runRainbowSuspenders();
+    final_values = out.product;
     index = floor((1-p) * numel(final_values));
     
     sorted_values = sort(final_values);
@@ -30,7 +30,7 @@ function [VaR, CVaR] = calculate_VaR(p)
     index = indices(end);
     plot([xi(index) xi(index)], [0 1], 'b--');
     
-    axis([0 xi(end) 0 max(f)]);
+    axis([xi(1) xi(end) 0 max(f)]);
     title('Probability Distribution Function');
     ylabel('f(x)');
     xlabel('Value of Product at Maturity');
@@ -52,7 +52,7 @@ function [VaR, CVaR] = calculate_VaR(p)
     indices = find(xi <= CVaR);
     index = indices(end);
     plot([xi(index) xi(index)], [0 1], 'r--');
-    axis([0 xi(end) 0 1]);
+    axis([xi(1) xi(end) 0 1]);
     title('Cumulative Distribution Function');
     ylabel('F(x)'); 
     xlabel('Value of Product at Maturity');

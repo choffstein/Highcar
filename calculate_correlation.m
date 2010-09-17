@@ -1,10 +1,16 @@
 function [corr, standard_error] = calculate_correlation()
     h = 0.0001;
-    [v1, z] = run_simulation(34, 15, 25, 0.045, 0.3-h);
-    v2 = run_simulation(34, 15, 25, 0.045, 0.3+h, z);
     
-    n = numel(v1(:, end));
-    rhos = (v1(:, end) - v2(:, end)) / (2*h);
-    corr = mean(rhos);
-    standard_error = sqrt(var(rhos) / n);
+    params = getParam();
+    params.rho = params.rho + h;
+    out_up = runRainbowSuspenders(params);
+    
+    params = getParam();
+    params.rho = params.rho - h;
+    out_down = runRainbowSuspenders(params, out_up);
+    
+    n = numel(out_up.rainbow);
+    curr_rhos = (out_up.product - out_down.product) / (2*h);
+    corr = mean(curr_rhos);
+    standard_error = sqrt(var(curr_rhos) / n);
 end
