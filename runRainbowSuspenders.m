@@ -1,7 +1,4 @@
 %{
-
-
-
   euro put at K_put
   euro call at K_call on each of the two worst performing stocks in 3-basket
 
@@ -21,11 +18,6 @@ function out = runRainbowSuspenders(varargin)
   optargs = {getParam() getEmptyPrev()};
   optargs(1:numel(varargin)) = varargin;
   [param prev] = optargs{:};
-
-  prev.z = [];
-  prev.S(1).f_surface = [];
-  prev.S(2).f_surface = [];
-  prev.S(3).f_surface = [];
   
   getStat = @(x) [mean(x); std(x)/sqrt(numel(x))];
 
@@ -51,6 +43,7 @@ function out = runRainbowSuspenders(varargin)
     
     sorted_values = sort(out.S(i).x(:, end) ./ param.S(i).x_0 - 1);
     
+    %{
     f = figure();
     subplot(2,1,1);
     [f,xi] = ksdensity(sorted_values, 'function', 'pdf');
@@ -75,10 +68,13 @@ function out = runRainbowSuspenders(varargin)
     xlabel('Days');
     ylabel('Price');
     axis([1 numel(s) min(m-s) max(m+s)]);
+    %}
     
     disp(i);
+    
   end
   
+  %{
   f = figure();
   scatterhist(out.S(1).x(:,end) / param.S(1).x_0 - 1, out.S(2).x(:, end) ./ param.S(2).x_0 - 1);
   t = sprintf('Stock Returns for %s v %s', param.S(1).name, param.S(2).name);
@@ -105,6 +101,7 @@ function out = runRainbowSuspenders(varargin)
   xlabel(xl);
   yl = sprintf('%s', param.S(1).name);
   ylabel(yl);
+  %}
   
   % call on worst two stocks
   s1_returns = out.S(1).x ./ param.S(1).x_0;
@@ -120,13 +117,34 @@ function out = runRainbowSuspenders(varargin)
   i2 = (s2_ret ~= maxes);
   i3 = (s3_ret ~= maxes);
   
-  v = max((i1.*out.S(1).x(:, end) + i2.*out.S(2).x(:, end) + ...
-              i3.*out.S(3).x(:, end)) - (i1.*param.S(1).x_0 + ...
-              i2.*param.S(2).x_0 + ...
-              i3.*param.S(3).x_0), 0);
+  rainbow_v = max((i1.*out.S(1).x(:, end) + i2.*out.S(2).x(:, end) + ...
+              i3.*out.S(3).x(:, end)) - (i1.*out.S(1).x(:, N/2) + ...
+              i2.*out.S(2).x(:, N/2) + ...
+              i3.*out.S(3).x(:, N/2)), 0);
 
+  
+  K1 = param.K_put * param.S(1).x_0;
+  K2 = param.K_put * param.S(2).x_0;
+  K3 = param.K_put * param.S(3).x_0;
+  
+  ks = [K1 K2 K3];
+  
+  p1 = max(K1 - out.S(1).x(:, end), 0);
+  p2 = max(K2 - out.S(2).x(:, end), 0);
+  p3 = max(K3 - out.S(3).x(:, end), 0);
+  
+  %{
   fprintf('Probability of being best performer after year 1\n');
   fprintf('\t%f,%f,%f\n', 1-mean(i1),1-mean(i2),1-mean(i3));
+  %}
+  out.rainbow = exp(-param.r*N*dt)*rainbow_v;
   
-  out.rainbow = exp(-param.r*N*dt)*v; 
+  holdFraction = param.notional / sum([param.S(:).sharesHeld] .* ks);
+  putQty = holdFraction .* [param.S(:).sharesHeld];
+  qt = min(putQty);
+  putPrice = exp(-param.r*N*dt)*[mean(p1) mean(p2) mean(p3)];
+  putLeg = sum(putPrice .* putQty);
+  pays = putLeg - (qt * mean(out.rainbow));
+  
+  out.product = exp(-param.r*N*dt)*(-qt*p1 + -qt*p2 + -qt*p3 + qt*rainbow_v);
 end

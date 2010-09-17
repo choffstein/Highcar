@@ -1,17 +1,19 @@
-function [stock f_gc_surface] = run_stock(p, prev, i, Z)
+function [stock f_surface] = run_stock(p, prev, i, Z)
 
-  if isempty(prev.S(i).f_gc_surface)    
+  if isempty(prev.S(i).f_surface)    
     if isempty(p.S(i).fixedSigma)
       % calulate local vol surface
-      gc_surface = local_vol_surface(p.S(i), p.r);
-      f_gc_surface = @(t,s) local_vol(gc_surface, t, s);
+      surface = local_vol_surface(p.S(i), p.r);
+      f_surface = @(t,s) local_vol(surface, t, s);
     else
       % use a constant vol surface
-      f_gc_surface = @(t,s) p.S(i).fixedSigma;
+      f_surface = @(t,s) p.S(i).fixedSigma;
     end
+  else
+      f_surface = prev.S(i).f_surface;
   end
 
-  stock = euler_simulation(p.S(i).x_0, p.T, f_gc_surface, Z, p.r);
+  stock = euler_simulation(p.S(i).x_0, p.T, f_surface, Z, p.r);
 end
 
 % from: run_put
