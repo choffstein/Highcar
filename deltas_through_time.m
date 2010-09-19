@@ -1,4 +1,4 @@
-function delta_path = deltas_through_time(num_paths)
+function out = deltas_through_time(num_paths)
     h = 0.0001;
     
     params = getParam();
@@ -17,8 +17,7 @@ function delta_path = deltas_through_time(num_paths)
         data.S(i).params.up.dt = params.T / N;
         data.S(i).params.down.dt = params.T / N;
     end
-    
-    delta_path = zeros(num_paths, N, 3);
+   
     for i = 1:num_paths
         
         fprintf('%i\n', i);
@@ -27,7 +26,14 @@ function delta_path = deltas_through_time(num_paths)
         current_path.S(2).x = data.original.S(2).x(i, :);
         current_path.S(3).x = data.original.S(3).x(i, :);
         
-            
+        out.S(1).path(i).stock_path = current_path.S(1).x;
+        out.S(2).path(i).stock_path = current_path.S(2).x;
+        out.S(3).path(i).stock_path = current_path.S(3).x;
+        
+        out.S(1).path(i).delta = zeros(N-1, 1);
+        out.S(2).path(i).delta = zeros(N-1, 1);
+        out.S(3).path(i).delta = zeros(N-1, 1);
+        
         for today = 1:(N-1)
             for j = 1:3
                 current_data.up = data.S(j).up;
@@ -51,10 +57,18 @@ function delta_path = deltas_through_time(num_paths)
                 value.down = product_value(down.S(j), data.S(j).params.down, N-today);
                 
                 delta = (value.up - value.down) / (2*h);
-                delta_path(i, today, j) = delta;
                 
-                if abs(delta) > 1e7
-                    5;
+                % make sure we don't get some weird artifacts from the
+                % +h putting the product in our out of the money
+                if today > 1
+                    difference = abs(delta - out.S(j).path(i).delta(today-1));
+                    if difference > 3e5;
+                        out.S(j).path(i).delta(today) = out.S(j).path(i).delta(today-1);
+                    else
+                        out.S(j).path(i).delta(today) = delta;
+                    end
+                else
+                    out.S(j).path(i).delta(today) = delta;
                 end
             end
         end
@@ -83,26 +97,37 @@ function v = product_value(d, param, tau)
   i2 = (s2_ret ~= maxes);
   i3 = (s3_ret ~= maxes);
   
-  rainbow_v = max((i1.*d.s(1).x + i2.*d.s(2).x + ...
-              i3.*d.s(3).x) - (i1.*d.s(1).strike + ...
-              i2.*d.s(2).strike + i3.*d.s(3).strike), 0);
-
+  % Stock values at T(2)
+  e1 = d.s(1).x;
+  e2 = d.s(2).x;
+  e3 = d.s(3).x;
+  
+  % Stock values at T(1)
+  h1 = d.s(1).strike;
+  h2 = d.s(2).strike;
+  h3 = d.s(3).strike;
+  
+  % Determine the proportion that each stock gives to the basket
+  n1 = i1.*(1.0 - h1 ./ (i1.*h1 + i2.*h2 + i3.*h3));
+  n2 = i2.*(1.0 - h2 ./ (i1.*h1 + i2.*h2 + i3.*h3));
+  n3 = i3.*(1.0 - h3 ./ (i1.*h1 + i2.*h2 + i3.*h3));
+  
+  % Compute the non-discounted value
+  rainbow_v = max((n1.*e1 + n2.*e2 + n3.*e3) - (n1.*h1 + n2.*h2 + n3.*h3), 0);
   
   K1 = param.K_put * param.S(1).x_0;
   K2 = param.K_put * param.S(2).x_0;
   K3 = param.K_put * param.S(3).x_0;
   
-  ks = [K1 K2 K3];
+  p1 = max(K1 - e1, 0);
+  p2 = max(K2 - e2, 0);
+  p3 = max(K3 - e3, 0);
+    
+  qt1 = 1.6287e+006;
+  qt2 = 3.8002e+006;
+  qt3 = 2.1716e+006;
   
-  p1 = max(K1 - d.s(1).x, 0);
-  p2 = max(K2 - d.s(2).x, 0);
-  p3 = max(K3 - d.s(3).x, 0);
+  qt4 = 2.7620e+006;
   
-  out.rainbow = exp(-param.r*tau*param.dt)*rainbow_v;
-  
-  holdFraction = param.notional / sum([param.S(:).sharesHeld] .* ks);
-  putQty = holdFraction .* [param.S(:).sharesHeld];
-  qt = min(putQty);
-  
-  v = mean(exp(-param.r*tau*param.dt)*(-qt*p1 + -qt*p2 + -qt*p3 + qt*rainbow_v));
+  v = mean(exp(-param.r*tau*param.dt)*(-qt1*p1 + -qt2*p2 + -qt3*p3 + qt4*rainbow_v));
 end
