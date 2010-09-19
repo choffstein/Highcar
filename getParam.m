@@ -1,8 +1,8 @@
 function p = getParam()
 
-  p.nSim = 100;
+  p.nSim = 10000;
   p.notional = 100000000;
-  p.K_put = 0.70;
+  p.K_put = 0.60;
   p.K_call = 1.20;
   p.rho = 0.3;
   p.r = 0.045;
