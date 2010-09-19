@@ -41,9 +41,9 @@ function out = runRainbowSuspenders(varargin)
     out.S(i).f_surface = f_surface;
     out.S(i).x = x;
     
+    %{
     sorted_values = sort(out.S(i).x(:, end) ./ param.S(i).x_0 - 1);
     
-    %{
     f = figure();
     subplot(2,1,1);
     [f,xi] = ksdensity(sorted_values, 'function', 'pdf');
@@ -110,18 +110,34 @@ function out = runRainbowSuspenders(varargin)
   s1_ret = s1_returns(:, N/2);
   s2_ret = s2_returns(:, N/2);
   s3_ret = s3_returns(:, N/2);
+  
   % find the 'best' return for each possible series
   maxes = max([s1_ret s2_ret s3_ret], [], 2);
+  
   % compute whether it is the best or not.  If it is not, give a 1 index
   i1 = (s1_ret ~= maxes);
   i2 = (s2_ret ~= maxes);
   i3 = (s3_ret ~= maxes);
   
-  rainbow_v = max((i1.*out.S(1).x(:, end) + i2.*out.S(2).x(:, end) + ...
-              i3.*out.S(3).x(:, end)) - (i1.*out.S(1).x(:, N/2) + ...
-              i2.*out.S(2).x(:, N/2) + ...
-              i3.*out.S(3).x(:, N/2)), 0);
-
+  % Stock values at T(2)
+  e1 = out.S(1).x(:, end);
+  e2 = out.S(2).x(:, end);
+  e3 = out.S(3).x(:, end);
+  
+  % Stock values at T(1)
+  h1 = out.S(1).x(:, N/2);
+  h2 = out.S(2).x(:, N/2);
+  h3 = out.S(3).x(:, N/2);
+  
+  % Determine the proportion that each stock gives to the basket
+  n1 = i1.*(1.0 - h1 ./ (i1.*h1 + i2.*h2 + i3.*h3));
+  n2 = i2.*(1.0 - h2 ./ (i1.*h1 + i2.*h2 + i3.*h3));
+  n3 = i3.*(1.0 - h3 ./ (i1.*h1 + i2.*h2 + i3.*h3));
+  
+  % Compute the non-discounted value
+  rainbow_v = max((n1.*e1 + n2.*e2 + n3.*e3) - (n1.*h1 + n2.*h2 + n3.*h3), 0);
+  
+  
   
   K1 = param.K_put * param.S(1).x_0;
   K2 = param.K_put * param.S(2).x_0;
@@ -144,7 +160,6 @@ function out = runRainbowSuspenders(varargin)
   qt = min(putQty);
   putPrice = exp(-param.r*N*dt)*[mean(p1) mean(p2) mean(p3)];
   putLeg = sum(putPrice .* putQty);
-  pays = putLeg - (qt * mean(out.rainbow));
   
   out.product = exp(-param.r*N*dt)*(-qt*p1 + -qt*p2 + -qt*p3 + qt*rainbow_v);
 end
